@@ -151,11 +151,11 @@ class Slicer:
         # 创建ass字幕文件对象
         subs = ass.document.Document()
         # 设置脚本信息
-        subs.info = ass.document.Info(
-            play_res_x=800,
-            play_res_y=600,
-            timer=100
-        )
+        # subs.info = ass.document.Info(
+        #     play_res_x=800,
+        #     play_res_y=600,
+        #     timer=100
+        # )
 
         # Apply and return slices.
         if len(sil_tags) == 0:
