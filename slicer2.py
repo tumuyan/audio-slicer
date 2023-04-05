@@ -1,7 +1,10 @@
 import numpy as np
-
+import ass
+import librosa
 
 # This function is obtained from librosa.
+
+
 def get_rms(
     y,
     *,
@@ -45,11 +48,17 @@ class Slicer:
                  min_length: int = 5000,
                  min_interval: int = 300,
                  hop_size: int = 20,
-                 max_sil_kept: int = 5000):
+                 max_sil_kept: int = 5000,
+                 ass_path: str = '',
+                 f0_ass: bool = False,
+                 f0_filter: int = 330
+                 ):
         if not min_length >= min_interval >= hop_size:
-            raise ValueError('The following condition must be satisfied: min_length >= min_interval >= hop_size')
+            raise ValueError(
+                'The following condition must be satisfied: min_length >= min_interval >= hop_size')
         if not max_sil_kept >= hop_size:
-            raise ValueError('The following condition must be satisfied: max_sil_kept >= hop_size')
+            raise ValueError(
+                'The following condition must be satisfied: max_sil_kept >= hop_size')
         min_interval = sr * min_interval / 1000
         self.threshold = 10 ** (threshold / 20.)
         self.hop_size = round(sr * hop_size / 1000)
@@ -57,6 +66,10 @@ class Slicer:
         self.min_length = round(sr * min_length / 1000 / self.hop_size)
         self.min_interval = round(min_interval / self.hop_size)
         self.max_sil_kept = round(sr * max_sil_kept / 1000 / self.hop_size)
+        self.ass_path = ass_path
+        self.f0_ass = f0_ass
+        self.f0_filter = f0_filter
+        self.sr = sr
 
     def _apply_slice(self, waveform, begin, end):
         if len(waveform.shape) > 1:
@@ -72,7 +85,8 @@ class Slicer:
             samples = waveform
         if samples.shape[0] <= self.min_length:
             return [waveform]
-        rms_list = get_rms(y=samples, frame_length=self.win_size, hop_length=self.hop_size).squeeze(0)
+        rms_list = get_rms(y=samples, frame_length=self.win_size,
+                           hop_length=self.hop_size).squeeze(0)
         sil_tags = []
         silence_start = None
         clip_start = 0
@@ -88,7 +102,8 @@ class Slicer:
                 continue
             # Clear recorded silence start if interval is not enough or clip is too short
             is_leading_silence = silence_start == 0 and i > self.max_sil_kept
-            need_slice_middle = i - silence_start >= self.min_interval and i - clip_start >= self.min_length
+            need_slice_middle = i - silence_start >= self.min_interval and i - \
+                clip_start >= self.min_length
             if not is_leading_silence and not need_slice_middle:
                 silence_start = None
                 continue
@@ -101,10 +116,13 @@ class Slicer:
                     sil_tags.append((pos, pos))
                 clip_start = pos
             elif i - silence_start <= self.max_sil_kept * 2:
-                pos = rms_list[i - self.max_sil_kept: silence_start + self.max_sil_kept + 1].argmin()
+                pos = rms_list[i - self.max_sil_kept: silence_start +
+                               self.max_sil_kept + 1].argmin()
                 pos += i - self.max_sil_kept
-                pos_l = rms_list[silence_start: silence_start + self.max_sil_kept + 1].argmin() + silence_start
-                pos_r = rms_list[i - self.max_sil_kept: i + 1].argmin() + i - self.max_sil_kept
+                pos_l = rms_list[silence_start: silence_start +
+                                 self.max_sil_kept + 1].argmin() + silence_start
+                pos_r = rms_list[i - self.max_sil_kept: i +
+                                 1].argmin() + i - self.max_sil_kept
                 if silence_start == 0:
                     sil_tags.append((0, pos_r))
                     clip_start = pos_r
@@ -112,8 +130,10 @@ class Slicer:
                     sil_tags.append((min(pos_l, pos), max(pos_r, pos)))
                     clip_start = max(pos_r, pos)
             else:
-                pos_l = rms_list[silence_start: silence_start + self.max_sil_kept + 1].argmin() + silence_start
-                pos_r = rms_list[i - self.max_sil_kept: i + 1].argmin() + i - self.max_sil_kept
+                pos_l = rms_list[silence_start: silence_start +
+                                 self.max_sil_kept + 1].argmin() + silence_start
+                pos_r = rms_list[i - self.max_sil_kept: i +
+                                 1].argmin() + i - self.max_sil_kept
                 if silence_start == 0:
                     sil_tags.append((0, pos_r))
                 else:
@@ -124,8 +144,19 @@ class Slicer:
         total_frames = rms_list.shape[0]
         if silence_start is not None and total_frames - silence_start >= self.min_interval:
             silence_end = min(total_frames, silence_start + self.max_sil_kept)
-            pos = rms_list[silence_start: silence_end + 1].argmin() + silence_start
+            pos = rms_list[silence_start: silence_end +
+                           1].argmin() + silence_start
             sil_tags.append((pos, total_frames + 1))
+
+        # 创建ass字幕文件对象
+        subs = ass.document.Document()
+        # 设置脚本信息
+        subs.info = ass.document.Info(
+            play_res_x=800,
+            play_res_y=600,
+            timer=100
+        )
+
         # Apply and return slices.
         if len(sil_tags) == 0:
             return [waveform]
@@ -134,10 +165,77 @@ class Slicer:
             if sil_tags[0][0] > 0:
                 chunks.append(self._apply_slice(waveform, 0, sil_tags[0][0]))
             for i in range(len(sil_tags) - 1):
-                chunks.append(self._apply_slice(waveform, sil_tags[i][1], sil_tags[i + 1][0]))
+                y = self._apply_slice(
+                    waveform, sil_tags[i][1], sil_tags[i + 1][0])
+
+                if self.f0_ass:
+                    event = ass_event(
+                        y, self.sr, sil_tags[i][1], sil_tags[i + 1][0], self.f0_filter)
+                    # 将事件添加到字幕文件
+                    subs.events.append(event)
+                    if event.__class__.__name__ == "Dialog":
+                        chunks.append(y)
+                    else:
+                        print(event.__class__.__name__)
+                else:
+                    chunks.append(y)
+
             if sil_tags[-1][1] < total_frames:
-                chunks.append(self._apply_slice(waveform, sil_tags[-1][1], total_frames))
+                chunks.append(self._apply_slice(
+                    waveform, sil_tags[-1][1], total_frames))
+
+            if len(self.ass_path) > 0:
+                # 保存为ass文件
+                with open(self.ass_path, mode="w", encoding="utf-8") as f:
+                    f.write(subs.dumps())
             return chunks
+
+
+def ass_event(y, sr, time_start, time_end, f0_filter=0):
+    formatted_f0_mean = ""
+
+    event = None
+    if f0_filter > 0:
+
+        # 读取音频文件，提取时间序列和采样率
+        #   y, sr = librosa.load(wav_file)
+        # 计算音频文件的 f0
+        f0, voiced_flag, voiced_probs = librosa.pyin(
+            y, fmin=librosa.note_to_hz('C2'), fmax=librosa.note_to_hz('C7'))
+        # 将未检测到声音的帧的 f0 置为 0
+        f0[voiced_flag == 0] = 0
+        # 筛选出符合条件的 f0
+        f0 = f0[(f0 > 50) & (f0 < 1100)]
+
+        # 统计大于 filter 的比例
+        f0_h = (f0 > f0_filter).astype(int)
+        proportion = np.mean(f0_h)
+        # 计算 f0 平均值并保留一位小数
+        f0_mean = np.mean(f0)
+        formatted_f0_mean = format(f0_mean, '.1f')
+
+        log = '平均f0：{}, 大于filter({})的f0占比{:.2%}'.format(
+            formatted_f0_mean, f0_filter, proportion)
+        print(log)
+
+        if f0_mean >= f0_filter:
+            # 创建一个事件
+            event = ass.document.events.Dialogue(
+                layer=0,
+                start=time_start,
+                end=time_end,
+                style="Default",
+                text=formatted_f0_mean
+            )
+        else:
+            event = ass.document.events.Comment(
+                layer=0,
+                start=time_start,
+                end=time_end,
+                style="Default",
+                text=formatted_f0_mean
+            )
+    return event
 
 
 def main():
@@ -149,7 +247,8 @@ def main():
 
     parser = ArgumentParser()
     parser.add_argument('audio', type=str, help='The audio to be sliced')
-    parser.add_argument('--out', type=str, help='Output directory of the sliced audio clips')
+    parser.add_argument('--out', type=str,
+                        help='Output directory of the sliced audio clips')
     parser.add_argument('--db_thresh', type=float, required=False, default=-40,
                         help='The dB threshold for silence detection')
     parser.add_argument('--min_length', type=int, required=False, default=5000,
@@ -179,7 +278,8 @@ def main():
     for i, chunk in enumerate(chunks):
         if len(chunk.shape) > 1:
             chunk = chunk.T
-        soundfile.write(os.path.join(out, f'%s_%d.wav' % (os.path.basename(args.audio).rsplit('.', maxsplit=1)[0], i)), chunk, sr)
+        soundfile.write(os.path.join(out, f'%s_%d.wav' % (
+            os.path.basename(args.audio).rsplit('.', maxsplit=1)[0], i)), chunk, sr)
 
 
 if __name__ == '__main__':
