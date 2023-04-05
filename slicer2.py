@@ -1,6 +1,7 @@
 import numpy as np
 import ass
 import librosa
+from tqdm import tqdm
 
 # This function is obtained from librosa.
 
@@ -164,7 +165,8 @@ class Slicer:
             chunks = []
             if sil_tags[0][0] > 0:
                 chunks.append(self._apply_slice(waveform, 0, sil_tags[0][0]))
-            for i in range(len(sil_tags) - 1):
+            for i in tqdm(range(0, len(sil_tags)), desc="Auto Slicer"):
+            # for i in range(len(sil_tags) - 1):
                 y = self._apply_slice(
                     waveform, sil_tags[i][1], sil_tags[i + 1][0])
 
@@ -179,7 +181,6 @@ class Slicer:
                         print(event.__class__.__name__)
                 else:
                     chunks.append(y)
-
             if sil_tags[-1][1] < total_frames:
                 chunks.append(self._apply_slice(
                     waveform, sil_tags[-1][1], total_frames))
