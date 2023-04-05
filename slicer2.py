@@ -220,7 +220,7 @@ def ass_event(y, sr, time_start, time_end, f0_filter=0):
 
         if f0_mean >= f0_filter:
             # 创建一个事件
-            event = ass.document.events.Dialogue(
+            event = ass.document.Dialogue(
                 layer=0,
                 start=time_start,
                 end=time_end,
@@ -228,7 +228,7 @@ def ass_event(y, sr, time_start, time_end, f0_filter=0):
                 text=formatted_f0_mean
             )
         else:
-            event = ass.document.events.Comment(
+            event = ass.document.Comment(
                 layer=0,
                 start=time_start,
                 end=time_end,
