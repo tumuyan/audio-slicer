@@ -179,14 +179,13 @@ class Slicer:
                 y = self._apply_slice(
                     waveform, sil_tags[i][1], sil_tags[i + 1][0])
 
-                if self.f0_ass:
-                    event = ass_event(
-                        y, self.sr, sil_tags[i][1], sil_tags[i + 1][0], self.f0_filter)
-                    # 将事件添加到字幕文件
-                    if event != None:
-                        doc.events.append(event)
-                        if event.__class__.__name__ == "Dialog":
-                            chunks.append(y)
+                event = ass_event(
+                    y, self.sr, sil_tags[i][1], sil_tags[i + 1][0], self.f0_ass, self.f0_filter)
+                # 将事件添加到字幕文件
+                doc.events.append(event)
+                if event.__class__.__name__ == "Dialog":
+                    chunks.append(y)
+
                 else:
                     chunks.append(y)
             if sil_tags[-1][1] < total_frames:
@@ -200,11 +199,11 @@ class Slicer:
             return chunks
 
 
-def ass_event(y, sr, time_start, time_end, f0_filter=0):
+def ass_event(y, sr, time_start, time_end, f0_ass=False, f0_filter=0):
     formatted_f0_mean = ""
 
     event = None
-    if f0_filter > 0:
+    if f0_ass:
 
         # 读取音频文件，提取时间序列和采样率
         #   y, sr = librosa.load(wav_file)
@@ -244,6 +243,14 @@ def ass_event(y, sr, time_start, time_end, f0_filter=0):
                 style="Default",
                 text=formatted_f0_mean
             )
+    else:
+        event = ass.document.Dialogue(
+            layer=0,
+            start=time_start,
+            end=time_end,
+            style="Default",
+            text=''
+        )
     return event
 
 
