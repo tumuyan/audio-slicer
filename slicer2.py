@@ -2,7 +2,8 @@ import numpy as np
 import ass
 import librosa
 from tqdm import tqdm
-
+import os
+import soundfile
 # This function is obtained from librosa.
 
 
@@ -50,9 +51,12 @@ class Slicer:
                  min_interval: int = 300,
                  hop_size: int = 20,
                  max_sil_kept: int = 5000,
-                 ass_path: str = '',
-                 f0_ass: bool = False,
-                 f0_filter: int = 330
+                 ass_path: str = '',        # 保存ass字幕的路径（字符串为空则不保存）
+                 f0_ass: bool = False,      # 是否计算每个切片的f0
+                 f0_filter: int = 330,      # 只保留平均f0大于filter的切片
+                 f0_log: bool = False,      # 是否打印f0信息
+                 f0_progress: bool = True,
+                 clip_path: str = ''        # 保存切片的路径（字符串为空则不保存）
                  ):
         if not min_length >= min_interval >= hop_size:
             raise ValueError(
@@ -71,6 +75,9 @@ class Slicer:
         self.f0_ass = f0_ass
         self.f0_filter = f0_filter
         self.sr = sr
+        self.f0_progress = f0_progress
+        self.f0_log = f0_log
+        self.clip_path = clip_path
 
     def _apply_slice(self, waveform, begin, end):
         if len(waveform.shape) > 1:
@@ -185,9 +192,14 @@ class Slicer:
                 doc.events.append(event)
                 if event.__class__.__name__ == "Dialog":
                     chunks.append(y)
+                    if len(self.clip_path) > 0:
+                        if self.f0_ass:
+                            output_path = "{}{}_{}.wav".format(
+                                self.clip_path, i, event.text)
+                        else:
+                            output_path = "{}{}.wav".format(self.clip_path, i)
+                        soundfile.write(output_path, y, self.sr)
 
-                else:
-                    chunks.append(y)
             if sil_tags[-1][1] < total_frames:
                 chunks.append(self._apply_slice(
                     waveform, sil_tags[-1][1], total_frames))
@@ -199,7 +211,7 @@ class Slicer:
             return chunks
 
 
-def ass_event(y, sr, time_start, time_end, f0_ass=False, f0_filter=0):
+def ass_event(y, sr, time_start, time_end, f0_ass=False, f0_filter=0, f0_log=False):
     formatted_f0_mean = ""
 
     event = None
@@ -222,9 +234,9 @@ def ass_event(y, sr, time_start, time_end, f0_ass=False, f0_filter=0):
         f0_mean = np.mean(f0)
         formatted_f0_mean = format(f0_mean, '.1f')
 
-        log = '平均f0：{}, 大于filter({})的f0占比{:.2%}'.format(
-            formatted_f0_mean, f0_filter, proportion)
-        print(log)
+        if f0_log:
+            print('平均f0：{}, 大于filter({})的f0占比{:.2%}'.format(
+                formatted_f0_mean, f0_filter, proportion))
 
         if f0_mean >= f0_filter:
             # 创建一个事件
