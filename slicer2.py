@@ -173,7 +173,7 @@ class Slicer:
         style.shadow = 0
         style.outline = 0
         doc.styles.append(style)
-        print("clip_path:",self.clip_path)
+        print("clip_path:", self.clip_path)
         # Apply and return slices.
         if len(sil_tags) == 0:
             return [waveform]
@@ -190,7 +190,7 @@ class Slicer:
                     y, self.sr, sil_tags[i][1], sil_tags[i + 1][0], self.f0_ass, self.f0_filter)
                 # 将事件添加到字幕文件
                 doc.events.append(event)
-                print(i,event)
+                print(i, event)
                 if event.__class__.__name__ == "Dialog":
                     chunks.append(y)
                     if len(self.clip_path) > 0:
@@ -199,6 +199,7 @@ class Slicer:
                                 self.clip_path, i, event.text)
                         else:
                             output_path = "{}{}.wav".format(self.clip_path, i)
+                        print("output_path:", output_path)
                         soundfile.write(output_path, y, self.sr)
 
             if sil_tags[-1][1] < total_frames:
