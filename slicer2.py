@@ -150,13 +150,22 @@ class Slicer:
             sil_tags.append((pos, total_frames + 1))
 
         # 创建ass字幕文件对象
-        subs = ass.document.Document()
+        doc = ass.document.Document()
         # 设置脚本信息
         # subs.info = ass.document.Info(
         #     play_res_x=800,
         #     play_res_y=600,
         #     timer=100
         # )
+        style = ass.section.Style()
+        style.fontsize = 18
+        style.primary_color = ass.data.Color(r=0xff, g=0xff, b=0xff)
+        style.secondary_color = ass.data.Color(r=0x00, g=0x00, b=0x00)
+        style.margin_v = -1
+        style.alignment = 8
+        style.shadow = 0
+        style.outline = 0
+        doc.styles.append(style)
 
         # Apply and return slices.
         if len(sil_tags) == 0:
@@ -174,7 +183,7 @@ class Slicer:
                     event = ass_event(
                         y, self.sr, sil_tags[i][1], sil_tags[i + 1][0], self.f0_filter)
                     # 将事件添加到字幕文件
-                    subs.events.append(event)
+                    doc.events.append(event)
                     if event.__class__.__name__ == "Dialog":
                         chunks.append(y)
                     else:
@@ -188,7 +197,7 @@ class Slicer:
             if len(self.ass_path) > 0:
                 # 保存为ass文件
                 with open(self.ass_path, mode="w", encoding="utf-8") as f:
-                    f.write(subs.dumps())
+                    doc.dump_file(f)
             return chunks
 
 
