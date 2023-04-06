@@ -174,8 +174,8 @@ class Slicer:
             chunks = []
             if sil_tags[0][0] > 0:
                 chunks.append(self._apply_slice(waveform, 0, sil_tags[0][0]))
-            for i in tqdm(range(0, len(sil_tags)), desc="Auto Slicer"):
-            # for i in range(len(sil_tags) - 1):
+            for i in tqdm(range(len(sil_tags)-1), desc="Auto Slicer"):
+                # for i in range(len(sil_tags) - 1):
                 y = self._apply_slice(
                     waveform, sil_tags[i][1], sil_tags[i + 1][0])
 
@@ -183,11 +183,10 @@ class Slicer:
                     event = ass_event(
                         y, self.sr, sil_tags[i][1], sil_tags[i + 1][0], self.f0_filter)
                     # 将事件添加到字幕文件
-                    doc.events.append(event)
-                    if event.__class__.__name__ == "Dialog":
-                        chunks.append(y)
-                    else:
-                        print(event.__class__.__name__)
+                    if event != None:
+                        doc.events.append(event)
+                        if event.__class__.__name__ == "Dialog":
+                            chunks.append(y)
                 else:
                     chunks.append(y)
             if sil_tags[-1][1] < total_frames:
